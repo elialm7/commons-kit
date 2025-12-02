@@ -80,19 +80,22 @@ A container for handling success (ok) and failure (err) without exceptions.
 | toFuture() | CompletableFuture\<V\>. | res.toFuture(); |
 
 #### **💡 Complete Scenario: User Registration Pipeline**
-
-public String registerUser(String rawJson) {  
-return Result.of(() \-\> parseJson(rawJson))           // 1\. Wrap potentially failing parsing logic  
-.map(json \-\> json.get("username").trim())        // 2\. Transform: extract and clean data  
-.ensure(name \-\> name.length() \> 3, "Name too short") // 3\. Validate business rule  
-.peek(name \-\> log.info("Registering: " \+ name))  // 4\. Side effect: logging  
-.flatMap(name \-\> saveToDatabase(name))           // 5\. Chain another operation that returns Result  
-.recover(err \-\> "Guest\_User")                    // 6\. Recovery: Fallback if anything above failed  
-.fold(  
-error \-\> "Registration Failed: " \+ error,    // 7\. Final Output: Handle Error case  
-user  \-\> "Welcome " \+ user                   // 8\. Final Output: Handle Success case  
-);  
+```java
+public String registerUser(String rawJson) {
+    return Result
+        .of(() -> parseJson(rawJson))                        // 1. Wrap potentially failing parsing logic
+        .map(json -> json.get("username").trim())            // 2. Transform: extract and clean data
+        .ensure(name -> name.length() > 3, "Name too short") // 3. Validate business rule
+        .peek(name -> log.info("Registering: " + name))      // 4. Side effect: logging
+        .flatMap(name -> saveToDatabase(name))               // 5. Chain another operation that returns Result
+        .recover(err -> "Guest_User")                        // 6. Recovery: Fallback if anything above failed
+        .fold(
+            error -> "Registration Failed: " + error,        // 7. Final Output: Handle Error case
+            user  -> "Welcome " + user                       // 8. Final Output: Handle Success case
+        );
 }
+```
+
 
 ### **2\. JsonUtils**
 
@@ -132,27 +135,29 @@ Static utilities for JSON processing using Jackson.
 | setProvider(Provider) | Swaps JSON implementation. | JsonUtils.setProvider(new GsonProvider()); |
 
 #### **💡 Complete Scenario: Configuration Manager**
+```java
+public void loadConfig() {
+    String defaults  = "{\"app\": {\"theme\": \"light\", \"retries\": 3}}";
+    String overrides = "{\"app\": {\"theme\": \"dark\", \"debug\": null}}";
 
-public void loadConfig() {  
-String defaults \= "{\\"app\\": {\\"theme\\": \\"light\\", \\"retries\\": 3}}";  
-String overrides \= "{\\"app\\": {\\"theme\\": \\"dark\\", \\"debug\\": null}}";
+    // 1. Parse both configs
+    JsonNodeWrapper defNode  = JsonUtils.parseNode(defaults).getOrThrow();
+    JsonNodeWrapper userNode = JsonUtils.parseNode(overrides).getOrThrow();
 
-    // 1\. Parse both configs  
-    JsonNodeWrapper defNode \= JsonUtils.parseNode(defaults).getOrThrow();  
-    JsonNodeWrapper userNode \= JsonUtils.parseNode(overrides).getOrThrow();
-
-    // 2\. Merge and Prune (Remove null 'debug' field)  
-    JsonNodeWrapper finalConfig \= JsonUtils.merge(defNode, userNode)  
-        .map(JsonUtils::prune)  
+    // 2. Merge and prune (remove null 'debug' field)
+    JsonNodeWrapper finalConfig = JsonUtils.merge(defNode, userNode)
+        .map(JsonUtils::prune)
         .getOrThrow();
 
-    // 3\. Modify runtime values  
+    // 3. Modify runtime values
     JsonUtils.updatePath(finalConfig, "app.lastLoaded", System.currentTimeMillis());
 
-    // 4\. Safe Extraction  
-    String theme \= JsonUtils.getString(finalConfig, "app.theme").orElse("light");  
-    int retries \= finalConfig.at("/app/retries").asInt(); // JSON Pointer syntax  
+    // 4. Safe extraction
+    String theme = JsonUtils.getString(finalConfig, "app.theme").orElse("light");
+    int retries  = finalConfig.at("/app/retries").asInt();  // JSON Pointer syntax
 }
+```
+
 
 ### **3\. MathUtils (NumberUtils)**
 
@@ -199,28 +204,31 @@ Null-safe BigDecimal operations. **Inputting null is safe and treated as Zero.**
 | extractDigits(Str) | Removes non-digit chars. | NumberUtils.extractDigits("(555) 123"); |
 
 #### **💡 Complete Scenario: Invoice Calculation**
+```java
+public void calculateInvoice() {
+    // 1. Safe input parsing (handles symbols, whitespace, nulls)
+    BigDecimal price    = NumberUtils.safeOf("$ 49.99");
+    BigDecimal quantity = NumberUtils.safeOf("3");
+    BigDecimal taxRate  = NumberUtils.safeOf("8.5"); // 8.5%
 
-public void calculateInvoice() {  
-// 1\. Safe Input Parsing (Handles symbols, whitespace, nulls)  
-BigDecimal price    \= NumberUtils.safeOf("$ 49.99");  
-BigDecimal quantity \= NumberUtils.safeOf("3");  
-BigDecimal taxRate  \= NumberUtils.safeOf("8.5"); // 8.5%
+    // 2. Arithmetic (price * qty)
+    BigDecimal subtotal = NumberUtils.mul(price, quantity);
 
-    // 2\. Arithmetic (Price \* Qty)  
-    BigDecimal subtotal \= NumberUtils.mul(price, quantity);
+    // 3. Percentage (subtotal * taxRate / 100)
+    BigDecimal tax = NumberUtils.percentage(subtotal, taxRate);
 
-    // 3\. Percentage (Subtotal \* TaxRate / 100\)  
-    BigDecimal tax \= NumberUtils.percentage(subtotal, taxRate);
+    // 4. Total (subtotal + tax)
+    BigDecimal total = NumberUtils.add(subtotal, tax);
 
-    // 4\. Total (Subtotal \+ Tax)  
-    BigDecimal total \= NumberUtils.add(subtotal, tax);
+    // 5. Validation & output
+    if (NumberUtils.isPos(total)
+        && NumberUtils.inRange(total, BigDecimal.ZERO, new BigDecimal("1000"))) {
 
-    // 5\. Validation & Output  
-    if (NumberUtils.isPos(total) && NumberUtils.inRange(total, BigDecimal.ZERO, new BigDecimal("1000"))) {  
-        // Output rounded to 2 decimals: "Total: 162.72"  
-        System.out.println("Total: " \+ NumberUtils.round(total, 2));  
-    }  
+        // Output rounded to 2 decimals: "Total: 162.72"
+        System.out.println("Total: " + NumberUtils.round(total, 2));
+    }
 }
+```
 
 ### **4\. TimeUtils (DateUtils)**
 
@@ -255,27 +263,29 @@ Universal converter for dates.
 | format(Temp, Pat) | Safe formatting. | DateUtils.format(date, "yyyy-MM"); |
 
 #### **💡 Complete Scenario: Meeting Scheduler**
+```java
+public void scheduleMeeting(String userInput) {
+    // 1. Analyze input (e.g., "15/03/2024")
+    LocalDate date = DateUtils.analyze(userInput)
+        .map(ParsedDate::date)
+        .getOrElse(LocalDate.now());
 
-public void scheduleMeeting(String userInput) {  
-// 1\. Analyze input (e.g., "15/03/2024")  
-LocalDate date \= DateUtils.analyze(userInput)  
-.map(ParsedDate::date)  
-.getOrElse(LocalDate.now());
-
-    // 2\. Business Logic: Move weekends to Monday  
-    if (DateUtils.isWeekend(date)) {  
-        date \= date.plusDays(2);  
+    // 2. Business logic: move weekends to Monday
+    if (DateUtils.isWeekend(date)) {
+        date = date.plusDays(2);
     }
 
-    // 3\. Normalization: Set constraints (Start/End times)  
-    LocalDateTime start \= DateUtils.withTime(date, "09:00");  
-    LocalDateTime end   \= DateUtils.withTime(date, "17:00");
+    // 3. Normalization: set constraints (start/end times)
+    LocalDateTime start = DateUtils.withTime(date, "09:00");
+    LocalDateTime end   = DateUtils.withTime(date, "17:00");
 
-    // 4\. Global Storage: Convert to UTC  
-    ZonedDateTime utcStart \= DateUtils.toUTC(start).getOrThrow();
+    // 4. Global storage: convert to UTC
+    ZonedDateTime utcStart = DateUtils.toUTC(start).getOrThrow();
 
-    System.out.printf("Meeting set for %s (UTC: %s)%n",   
-        DateUtils.format(start, "yyyy-MM-dd HH:mm"),   
-        utcStart  
-    );  
-}  
+    System.out.printf(
+        "Meeting set for %s (UTC: %s)%n",
+        DateUtils.format(start, "yyyy-MM-dd HH:mm"),
+        utcStart
+    );
+}
+```
